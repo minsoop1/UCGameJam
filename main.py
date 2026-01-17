@@ -6,6 +6,7 @@ DEFAULT_BGCOLOR = (137, 207, 240)
 DEFAULT_WIDTH   = 1280
 DEFAULT_HEIGHT  = 720
 GRID_SIZE = 12
+MAX_TILES = 35
 
 rgb = tuple[int,int,int]
 
@@ -38,6 +39,8 @@ class Quitter:
         self.y = 0
         self.set_path = False
         self.rm_path = False
+        self.paths_remaining = MAX_TILES
+        
 
     def x_transform(self, x, w, h):
         return (x * w / 2, (x * h/2)/2)
@@ -48,7 +51,8 @@ class Quitter:
     def initiate_blocks(self):
         self.ground_sprite = pygame.image.load('grass_cube.png').convert_alpha()
         self.path_sprite = pygame.image.load('path.png').convert_alpha()
-        self.water_sprite = pygame.image.load('Image.png').convert_alpha()
+        self.water_sprite = pygame.image.load('grey.png').convert_alpha()
+        #self.tree_sprite = pygame.image.load('tree.png').convert_alpha()
         scale_factor = 3
         self.ground = pygame.transform.scale(self.ground_sprite,(int(self.ground_sprite.get_width() * scale_factor), int(self.ground_sprite.get_height() * scale_factor)))
         self.path = pygame.transform.scale(self.path_sprite,(int(self.path_sprite.get_width() * scale_factor), int(self.path_sprite.get_height() * scale_factor)))
@@ -75,7 +79,7 @@ class Quitter:
         half_h = h / 4
 
         pivot_x = DEFAULT_WIDTH / 2
-        pivot_y = 100
+        pivot_y = 50
 
         rel_x = self.x - pivot_x
         rel_y = self.y - pivot_y
@@ -92,12 +96,16 @@ class Quitter:
                 draw_y = pivot_y + (j + i) * half_h
 
                 # Hover effect
-                if i == grid_i and j == grid_j:
+                if world_grid[i][j] >= 0 and i == grid_i and j == grid_j:
                     draw_y -= 10
-                    if self.set_path and world_grid[i][j] != -1:
-                        world_grid[i][j] = 1
+                    if self.set_path and self.paths_remaining > 0 and world_grid[i][j] != -1:
+                        if  world_grid[i][j] != 1:
+                            world_grid[i][j] = 1
+                            self.paths_remaining -= 1
                     elif self.rm_path and world_grid[i][j] != -1:
-                        world_grid[i][j] = 0
+                        if  world_grid[i][j] != 0:
+                            world_grid[i][j] = 0
+                            self.paths_remaining += 1
                 
                 if world_grid[i][j] == 0:
                     self.surface.blit(self.ground, (draw_x, draw_y))
@@ -108,7 +116,8 @@ class Quitter:
 
     def draw_window(self) -> None:
         self.surface.fill(self.bgcolor)
-        self.map_grid()        
+        self.map_grid()   
+        #self.surface.blit(self.tree_sprite, (100, 100))
         pygame.display.update()
 
     def is_grid_valid(self, world_grid, grid_size):
