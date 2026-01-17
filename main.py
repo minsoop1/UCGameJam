@@ -1,9 +1,10 @@
 import sys
 import pygame
+import numpy as np
 
-DEFAULT_BGCOLOR = (0,0,100)
-DEFAULT_WIDTH   = 809
-DEFAULT_HEIGHT  = 500 # if you're wondering, 809x500 is roughly the golden ratio
+DEFAULT_BGCOLOR = (137, 207, 240)
+DEFAULT_WIDTH   = 1280
+DEFAULT_HEIGHT  = 720 # if you're wondering, 809x500 is roughly the golden ratio
 
 # type synonym for convenience
 rgb = tuple[int,int,int]
@@ -23,17 +24,26 @@ class Quitter:
         self.bgcolor = bgcolor if bgcolor else DEFAULT_BGCOLOR
         self.width   = width if width else DEFAULT_WIDTH
         self.height  = height if height else DEFAULT_HEIGHT
-        self.image = None
+        self.ground = None
+
+    def i_hat(self, x, w, h):
+        return (x * w / 2, (x * h/2)/2)
+    
+    def j_hat(self,y, w, h):
+        return ((-y * w) / 2, (y * h/2)/2)
+    
 
     def run_app(self) -> None:
         pygame.init()
         pygame.display.set_caption("Quitter")
         self.surface = pygame.display.set_mode((self.width,self.height))
         self.clock = pygame.time.Clock()
-        self.ground = pygame.image.load('grass_cube.png').convert_alpha()
-        print("Hello")
+        self.sprite = pygame.image.load('grass_cube.png').convert_alpha()
+        scale_factor = 3
+        self.ground = pygame.transform.scale(self.sprite,(int(self.sprite.get_width() * scale_factor), int(self.sprite.get_height() * scale_factor)))
+        self.spriteSize = (self.ground.get_width(), self.ground.get_height())
+        print(self.spriteSize)
         self.run_event_loop()
-        
 
     def quit_app(self) -> None:
         pygame.quit()
@@ -41,7 +51,13 @@ class Quitter:
 
     def draw_window(self) -> None:
         self.surface.fill(self.bgcolor)
-        self.surface.blit(self.ground, (50,50))
+        grid_size = 12
+        for i in range(grid_size):
+            for j in range(grid_size):
+                x = self.i_hat(j, self.spriteSize[0], self.spriteSize[1])
+                y = self.j_hat(i, self.spriteSize[0], self.spriteSize[1])
+                
+                self.surface.blit(self.ground, (DEFAULT_WIDTH/2 + x[0] + y[0] - self.spriteSize[0]/2, self.spriteSize[1]/2 + x[1] + y[1]))
         pygame.display.update()
         
 
