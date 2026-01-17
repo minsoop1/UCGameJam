@@ -26,7 +26,7 @@ class Zombie(pygame.sprite.Sprite):
             self.kill()
             
     
-
+ 
 
 
 
