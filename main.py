@@ -16,21 +16,52 @@ rgb = tuple[int,int,int]
 #SPRITES_DIR = os.path.join(ASSETS_DIR, 'sprites')
 
 PRRSET_WORLD = [[0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0, 0], 
-                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
+                [0, 0, 0, 0, 0, 0, -2, 0, 0, 0, 0, 0], 
                 [0, 0, 0, 0, 0, 0, 0, 0, -2, 0, 0, 0], 
+                [0, 0, 0, -2, 0, 0, 0, 0, 0, 0, 0, 0], 
                 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
                 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
-                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
-                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
+                [0, 0, -2, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
                 [0, 0, 0, 0, 0, 0, 0, -2, 0, 0, 0, 0], 
                 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
                 [0, 0, 0, 0, 0, -2, 0, 0, 0, 0, 0, 0], 
                 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
                 [0, 0, 0, -1, 0, 0, 0, 0, 0, 0, 0, 0]]
 
-                
+class Mob:
+    def __init__(self, grid_coords, sprite_size, pivot_x, pivot_y):
+        self.waypoints = []
+        w, h = sprite_size
+        half_w, half_h = w / 2, h / 4
+        
+        # Convert grid indices to isometric screen coordinates
+        for i, j in grid_coords:
+            tx = pivot_x + (j - i) * half_w
+            ty = pivot_y + (j + i) * half_h
+            self.waypoints.append(pygame.Vector2(tx, ty + 80))
+            
+        self.pos = pygame.Vector2(self.waypoints[0]) if self.waypoints else pygame.Vector2(0,0)
+        self.target_idx = 1
+        self.speed = 0.5
 
-class Quitter:
+    def update(self):
+        if self.target_idx < len(self.waypoints):
+            target = self.waypoints[self.target_idx]
+            move_vec = target - self.pos
+            if move_vec.length() > self.speed:
+                self.pos += move_vec.normalize() * self.speed
+            else:
+                self.pos = pygame.Vector2(target)
+                self.target_idx += 1
+
+    def draw(self, surface):
+        # Draw a small red square as the 'runner'
+        runner_rect = pygame.Rect(0, 0, 24, 24)
+        runner_rect.center = (self.pos.x, self.pos.y)
+        pygame.draw.rect(surface, (200, 50, 50), runner_rect)
+        pygame.draw.rect(surface, (255, 255, 255), runner_rect, 2)                
+
+class Game:
 
     bgcolor : rgb
     width   : int
@@ -46,6 +77,7 @@ class Quitter:
         self.width   = width if width else DEFAULT_WIDTH
         self.height  = height if height else DEFAULT_HEIGHT
         self.ground = None
+        self.runner = None
         self.x = 0
         self.y = 0
         self.set_path = False
@@ -54,6 +86,10 @@ class Quitter:
         self.reset_grid()
         self.round_active = False
         self.edit_mode = True
+        
+        self.SPAWN_MOB_EVENT = pygame.USEREVENT + 1
+        self.mobs = [] # List to track all active mobs
+        self.mobs_to_spawn = 0
         pygame.font.init()        
 
     def x_transform(self, x, w, h):
@@ -73,7 +109,7 @@ class Quitter:
         self.chckpnt_sprite = self.load_image('grey.png')
         self.red_sprite = self.load_image('red.png')
         #self.tree_sprite = pygame.image.load('tree.png').convert_alpha()
-        scale_factor = 3
+        scale_factor = 2.8
         self.ground = pygame.transform.scale(self.ground_sprite,(int(self.ground_sprite.get_width() * scale_factor), int(self.ground_sprite.get_height() * scale_factor)))
         self.path = pygame.transform.scale(self.path_sprite,(int(self.path_sprite.get_width() * scale_factor), int(self.path_sprite.get_height() * scale_factor)))
         self.water = pygame.transform.scale(self.water_sprite,(int(self.water_sprite.get_width() * scale_factor), int(self.water_sprite.get_height() * scale_factor)))
@@ -83,7 +119,7 @@ class Quitter:
 
     def run_app(self) -> None:
         pygame.init()
-        pygame.display.set_caption("Quitter")
+        pygame.display.set_caption("Tower Offense")
         self.surface = pygame.display.set_mode((self.width,self.height))
         self.clock = pygame.time.Clock()
         self.initiate_blocks()
@@ -102,7 +138,7 @@ class Quitter:
         half_h = h / 4
 
         pivot_x = DEFAULT_WIDTH / 2
-        pivot_y = 50
+        pivot_y = 125
 
         rel_x = self.x - pivot_x
         rel_y = self.y - pivot_y
@@ -143,8 +179,48 @@ class Quitter:
                 elif self.world_grid[i][j] == -2:
                     self.surface.blit(self.red, (draw_x, draw_y))
 
+    def get_path_waypoints(self):
+        # 1. Find the starting -1 (bottom-most row preference)
+        start_pos = None
+        for i in range(GRID_SIZE - 1, -1, -1):
+            for j in range(GRID_SIZE):
+                if self.world_grid[i][j] == -1:
+                    start_pos = (i, j)
+                    break
+            if start_pos: break
+
+        if not start_pos: return []
+
+        path_coords = [start_pos]
+        visited = {start_pos}
+        current = start_pos
+
+        # 2. Trace the line
+        while True:
+            curr_i, curr_j = current
+            found_next = False
+            for di, dj in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
+                ni, nj = curr_i + di, curr_j + dj
+                if 0 <= ni < GRID_SIZE and 0 <= nj < GRID_SIZE:
+                    val = self.world_grid[ni][nj]
+                    if (ni, nj) not in visited and (val == 1 or val == -1):
+                        path_coords.append((ni, nj))
+                        visited.add((ni, nj))
+                        current = (ni, nj)
+                        found_next = True
+                        if val == -1: # Reached the end
+                            return path_coords
+                        break
+            if not found_next: break
+        return path_coords
+
     def start_round(self):
         pygame.draw.rect(self.surface, (0,0,0), pygame.Rect(100,100,20,20))
+    
+    def draw_UI(self) -> None: 
+        self.font = pygame.font.Font(None, 50)
+        self.text = self.font.render(f'Mobs: ', True, (0, 0, 0))
+        self.surface.blit(self.text, (100, 30))
 
     def draw_window(self) -> None:
         self.surface.fill(self.bgcolor)
@@ -154,8 +230,11 @@ class Quitter:
         self.text = self.font.render(f'Remaining: {self.paths_remaining}', True, (0, 0, 0))
         self.surface.blit(self.text, (100, 650))
         if self.round_active:
-            self.start_round()
+            for mob in self.mobs:
+                mob.update()
+                mob.draw(self.surface)
         #self.surface.blit(self.tree_sprite, (100, 100))
+        self.draw_UI()
         pygame.display.update()
 
     #Optimize This
@@ -246,6 +325,17 @@ class Quitter:
                         if self.is_grid_valid(self.world_grid, GRID_SIZE):
                             self.edit_mode = False
                             self.round_active = True
+                            self.mobs_to_spawn = 10 
+                            # Set timer to trigger SPAWN_MOB_EVENT every 1000ms (1 second)
+                            pygame.time.set_timer(self.SPAWN_MOB_EVENT, 1000)
+                elif event.type == self.SPAWN_MOB_EVENT:
+                    if self.mobs_to_spawn > 0:
+                        pts = self.get_path_waypoints()
+                        new_mob = Mob(pts, self.spriteSize, DEFAULT_WIDTH/2, 50)
+                        self.mobs.append(new_mob)
+                        self.mobs_to_spawn -= 1
+                    else:
+                        pygame.time.set_timer(self.SPAWN_MOB_EVENT, 0)
                 elif event.type == pygame.KEYUP:
                     pass
             self.draw_window()
@@ -254,6 +344,6 @@ class Quitter:
 # ========
 
 if __name__ == "__main__":
-    q = Quitter()
+    q = Game()
     q.run_app()
 
