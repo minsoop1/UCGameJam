@@ -26,10 +26,10 @@ class Quitter:
         self.height  = height if height else DEFAULT_HEIGHT
         self.ground = None
 
-    def i_hat(self, x, w, h):
+    def x_transform(self, x, w, h):
         return (x * w / 2, (x * h/2)/2)
     
-    def j_hat(self,y, w, h):
+    def y_transform(self,y, w, h):
         return ((-y * w) / 2, (y * h/2)/2)
     
 
@@ -54,10 +54,12 @@ class Quitter:
         grid_size = 12
         for i in range(grid_size):
             for j in range(grid_size):
-                x = self.i_hat(j, self.spriteSize[0], self.spriteSize[1])
-                y = self.j_hat(i, self.spriteSize[0], self.spriteSize[1])
-                
-                self.surface.blit(self.ground, (DEFAULT_WIDTH/2 + x[0] + y[0] - self.spriteSize[0]/2, self.spriteSize[1]/2 + x[1] + y[1]))
+                i_hat = self.x_transform(j, self.spriteSize[0], self.spriteSize[1])
+                j_hat = self.y_transform(i, self.spriteSize[0], self.spriteSize[1])
+                inverse_T = [[i_hat[0], j_hat[0]],
+                             [i_hat[1], j_hat[1]]]
+
+                self.surface.blit(self.ground, (DEFAULT_WIDTH/2 + i_hat[0] + j_hat[0] - self.spriteSize[0]/2, self.spriteSize[1]/2 + i_hat[1] + j_hat[1]))
         pygame.display.update()
         
 
